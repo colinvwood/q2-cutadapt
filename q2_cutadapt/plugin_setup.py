@@ -54,10 +54,10 @@ plugin.methods.register_function(
         'demultiplexed_sequences': SampleData[SequencesWithQuality],
     },
     parameters={
-        'cores': Threads,
         'adapter': List[Str],
         'front': List[Str],
         'anywhere': List[Str],
+        'cut': Int,
         'error_rate': Float % Range(0, 1, inclusive_start=True,
                                     inclusive_end=True),
         'indels': Bool,
@@ -72,6 +72,7 @@ plugin.methods.register_function(
         'quality_cutoff_3end': Int % Range(0, None),
         'quality_cutoff_5end': Int % Range(0, None),
         'quality_base': Int % Range(0, None),
+        'cores': Threads,
     },
     outputs=[
         ('trimmed_sequences', SampleData[SequencesWithQuality]),
@@ -80,53 +81,81 @@ plugin.methods.register_function(
         'demultiplexed_sequences': 'The single-end sequences to be trimmed.',
     },
     parameter_descriptions={
-        'cores': 'Number of CPU cores to use.',
-        'adapter': 'Sequence of an adapter ligated to the 3\' end. The '
-                   'adapter and any subsequent bases are trimmed. If a `$` '
-                   'is appended, the adapter is only found if it is at the '
-                   'end of the read. If your sequence of interest is "framed" '
-                   'by a 5\' and a 3\' adapter, use this parameter to define '
-                   'a "linked" primer - see https://cutadapt.readthedocs.io '
-                   'for complete details.',
-        'front': 'Sequence of an adapter ligated to the 5\' end. The adapter '
-                 'and any preceding bases are trimmed. Partial matches at the '
-                 '5\' end are allowed. If a `^` character is prepended, the '
-                 'adapter is only found if it is at the beginning of the '
-                 'read.',
-        'anywhere': 'Sequence of an adapter that may be ligated to the 5\' or '
-                    '3\' end. Both types of matches as described under '
-                    '`adapter` and `front` are allowed. If the first base of '
-                    'the read is part of the match, the behavior is as with '
-                    '`front`, otherwise as with `adapter`. This option is '
-                    'mostly for rescuing failed library preparations - do '
-                    'not use if you know which end your adapter was ligated '
-                    'to.',
+        'adapter': (
+            'Sequence of an adapter ligated to the 3\' end. The '
+            'adapter and any subsequent bases are trimmed. If a `$` '
+            'is appended, the adapter is only found if it is at the '
+            'end of the read. If your sequence of interest is "framed" '
+            'by a 5\' and a 3\' adapter, use this parameter to define '
+            'a "linked" primer - see https://cutadapt.readthedocs.io '
+            'for complete details.'
+        ),
+        'front': (
+            'Sequence of an adapter ligated to the 5\' end. The adapter '
+            'and any preceding bases are trimmed. Partial matches at the '
+            '5\' end are allowed. If a `^` character is prepended, the '
+            'adapter is only found if it is at the beginning of the '
+            'read.'
+        ),
+        'anywhere': (
+            'Sequence of an adapter that may be ligated to the 5\' or '
+            '3\' end. Both types of matches as described under '
+            '`adapter` and `front` are allowed. If the first base of '
+            'the read is part of the match, the behavior is as with '
+            '`front`, otherwise as with `adapter`. This option is '
+            'mostly for rescuing failed library preparations - do '
+            'not use if you know which end your adapter was ligated '
+            'to.'
+        ),
+        'cut': (
+            'Unconditionally remove bases from the beginning or end of each '
+            'read. Cutting is applied before adapter trimming. Use a '
+            'positive integer to remove bases from the 5\' end and a negative '
+            'integer to remove bases from the 3\' end.'
+        ),
         'error_rate': 'Maximum allowed error rate.',
-        'indels': 'Allow insertions or deletions of bases when matching '
-                  'adapters.',
-        'times': 'Remove multiple occurrences of an adapter if it is '
-                 'repeated, up to `times` times.',
-        'overlap': 'Require at least `overlap` bases of overlap between read '
-                   'and adapter for an adapter to be found.',
-        'match_read_wildcards': 'Interpret IUPAC wildcards (e.g., N) in '
-                                'reads.',
-        'match_adapter_wildcards': 'Interpret IUPAC wildcards (e.g., N) in '
-                                   'adapters.',
-        'minimum_length': 'Discard reads shorter than specified value. Note, '
-                          'the cutadapt default of 0 has been overridden, '
-                          'because that value produces empty sequence '
-                          'records.',
+        'indels': (
+            'Allow insertions or deletions of bases when matching adapters.'
+        ),
+        'times': (
+            'Remove multiple occurrences of an adapter if it is '
+            'repeated, up to `times` times.'
+        ),
+        'overlap': (
+            'Require at least `overlap` bases of overlap between read '
+            'and adapter for an adapter to be found.'
+        ),
+        'match_read_wildcards': (
+            'Interpret IUPAC wildcards (e.g., N) in reads.'
+        ),
+        'match_adapter_wildcards': (
+            'Interpret IUPAC wildcards (e.g., N) in adapters.'
+        ),
+        'minimum_length': (
+            'Discard reads shorter than specified value. Note, '
+            'the cutadapt default of 0 has been overridden, '
+            'because that value produces empty sequence '
+            'records.'
+        ),
         'discard_untrimmed': 'Discard reads in which no adapter was found.',
-        'max_expected_errors': 'Discard reads that exceed maximum expected '
-                               'erroneous nucleotides.',
-        'max_n': 'Discard reads with more than COUNT N bases. '
-                 'If COUNT_or_FRACTION is a number between 0 and 1, '
-                 'it is interpreted as a fraction of the read length.',
-        'quality_cutoff_3end': 'Trim nucleotides with Phred score quality '
-                               'lower than threshold from 3 prime end.',
-        'quality_cutoff_5end': 'Trim nucleotides with Phred score quality '
-                               'lower than threshold from 5 prime end.',
+        'max_expected_errors': (
+            'Discard reads that exceed maximum expected erroneous nucleotides.'
+        ),
+        'max_n': (
+            'Discard reads with more than COUNT N bases. '
+            'If COUNT_or_FRACTION is a number between 0 and 1, '
+            'it is interpreted as a fraction of the read length.'
+        ),
+        'quality_cutoff_3end': (
+            'Trim nucleotides with Phred score quality '
+            'lower than threshold from 3 prime end.'
+        ),
+        'quality_cutoff_5end': (
+            'Trim nucleotides with Phred score quality lower than threshold '
+            'from 5 prime end.'
+        ),
         'quality_base': 'How the Phred score is encoded (33 or 64).',
+        'cores': 'Number of CPU cores to use.',
     },
     output_descriptions={
         'trimmed_sequences': 'The resulting trimmed sequences.',
@@ -145,13 +174,14 @@ plugin.methods.register_function(
         'demultiplexed_sequences': SampleData[PairedEndSequencesWithQuality],
     },
     parameters={
-        'cores': Threads,
         'adapter_f': List[Str],
         'front_f': List[Str],
         'anywhere_f': List[Str],
         'adapter_r': List[Str],
         'front_r': List[Str],
         'anywhere_r': List[Str],
+        'forward_cut': Int,
+        'reverse_cut': Int,
         'error_rate': Float % Range(0, 1, inclusive_start=True,
                                     inclusive_end=True),
         'indels': Bool,
@@ -166,6 +196,7 @@ plugin.methods.register_function(
         'quality_cutoff_3end': Int % Range(0, None),
         'quality_cutoff_5end': Int % Range(0, None),
         'quality_base': Int % Range(0, None),
+        'cores': Threads,
     },
     outputs=[
         ('trimmed_sequences', SampleData[PairedEndSequencesWithQuality]),
@@ -174,75 +205,117 @@ plugin.methods.register_function(
         'demultiplexed_sequences': 'The paired-end sequences to be trimmed.',
     },
     parameter_descriptions={
-        'cores': 'Number of CPU cores to use.',
-        'adapter_f': 'Sequence of an adapter ligated to the 3\' end. The '
-                     'adapter and any subsequent bases are trimmed. If a `$` '
-                     'is appended, the adapter is only found if it is at the '
-                     'end of the read. Search in forward read. If your '
-                     'sequence of interest is "framed" by a 5\' and a 3\' '
-                     'adapter, use this parameter to define a "linked" primer '
-                     '- see https://cutadapt.readthedocs.io for complete '
-                     'details.',
-        'front_f': 'Sequence of an adapter ligated to the 5\' end. The '
-                   'adapter and any preceding bases are trimmed. Partial '
-                   'matches at the 5\' end are allowed. If a `^` character '
-                   'is prepended, the adapter is only found if it is at the '
-                   'beginning of the read. Search in forward read.',
-        'anywhere_f': 'Sequence of an adapter that may be ligated to the 5\' '
-                      'or 3\' end. Both types of matches as described under '
-                      '`adapter` and `front` are allowed. If the first base '
-                      'of the read is part of the match, the behavior is as '
-                      'with `front`, otherwise as with `adapter`. This option '
-                      'is mostly for rescuing failed library preparations - '
-                      'do not use if you know which end your adapter was '
-                      'ligated to. Search in forward read.',
-        'adapter_r': 'Sequence of an adapter ligated to the 3\' end. The '
-                     'adapter and any subsequent bases are trimmed. If a `$` '
-                     'is appended, the adapter is only found if it is at the '
-                     'end of the read. Search in reverse read. If your '
-                     'sequence of interest is "framed" by a 5\' and a 3\' '
-                     'adapter, use this parameter to define a "linked" primer '
-                     '- see https://cutadapt.readthedocs.io for complete '
-                     'details.',
-        'front_r': 'Sequence of an adapter ligated to the 5\' end. The '
-                   'adapter and any preceding bases are trimmed. Partial '
-                   'matches at the 5\' end are allowed. If a `^` character '
-                   'is prepended, the adapter is only found if it is at the '
-                   'beginning of the read. Search in reverse read.',
-        'anywhere_r': 'Sequence of an adapter that may be ligated to the 5\' '
-                      'or 3\' end. Both types of matches as described under '
-                      '`adapter` and `front` are allowed. If the first base '
-                      'of the read is part of the match, the behavior is as '
-                      'with `front`, otherwise as with `adapter`. This '
-                      'option is mostly for rescuing failed library '
-                      'preparations - do not use if you know which end your '
-                      'adapter was ligated to. Search in reverse read.',
+        'adapter_f': (
+            'Sequence of an adapter ligated to the 3\' end. The '
+            'adapter and any subsequent bases are trimmed. If a `$` '
+            'is appended, the adapter is only found if it is at the '
+            'end of the read. Search in forward read. If your '
+            'sequence of interest is "framed" by a 5\' and a 3\' '
+            'adapter, use this parameter to define a "linked" primer '
+            '- see https://cutadapt.readthedocs.io for complete '
+            'details.'
+        ),
+        'front_f': (
+            'Sequence of an adapter ligated to the 5\' end. The '
+            'adapter and any preceding bases are trimmed. Partial '
+            'matches at the 5\' end are allowed. If a `^` character '
+            'is prepended, the adapter is only found if it is at the '
+            'beginning of the read. Search in forward read.'
+        ),
+        'anywhere_f': (
+            'Sequence of an adapter that may be ligated to the 5\' '
+            'or 3\' end. Both types of matches as described under '
+            '`adapter` and `front` are allowed. If the first base '
+            'of the read is part of the match, the behavior is as '
+            'with `front`, otherwise as with `adapter`. This option '
+            'is mostly for rescuing failed library preparations - '
+            'do not use if you know which end your adapter was '
+            'ligated to. Search in forward read.'
+        ),
+        'adapter_r': (
+            'Sequence of an adapter ligated to the 3\' end. The '
+            'adapter and any subsequent bases are trimmed. If a `$` '
+            'is appended, the adapter is only found if it is at the '
+            'end of the read. Search in reverse read. If your '
+            'sequence of interest is "framed" by a 5\' and a 3\' '
+            'adapter, use this parameter to define a "linked" primer '
+            '- see https://cutadapt.readthedocs.io for complete '
+            'details.'
+        ),
+        'front_r': (
+            'Sequence of an adapter ligated to the 5\' end. The '
+            'adapter and any preceding bases are trimmed. Partial '
+            'matches at the 5\' end are allowed. If a `^` character '
+            'is prepended, the adapter is only found if it is at the '
+            'beginning of the read. Search in reverse read.'
+        ),
+        'anywhere_r': (
+            'Sequence of an adapter that may be ligated to the 5\' '
+            'or 3\' end. Both types of matches as described under '
+            '`adapter` and `front` are allowed. If the first base '
+            'of the read is part of the match, the behavior is as '
+            'with `front`, otherwise as with `adapter`. This '
+            'option is mostly for rescuing failed library '
+            'preparations - do not use if you know which end your '
+            'adapter was ligated to. Search in reverse read.'
+        ),
+        'forward_cut': (
+            'Unconditionally remove bases from the beginning or end of each '
+            'forward read. Cutting is applied before adapter trimming. Use a '
+            'positive integer to remove bases from the 5\' end and a negative '
+            'integer to remove bases from the 3\' end.'
+        ),
+        'reverse_cut': (
+            'Unconditionally remove bases from the beginning or end of each '
+            'reverse read. Cutting is applied before adapter trimming. Use a '
+            'positive integer to remove bases from the 5\' end and a negative '
+            'integer to remove bases from the 3\' end.'
+        ),
         'error_rate': 'Maximum allowed error rate.',
-        'indels': 'Allow insertions or deletions of bases when matching '
-                  'adapters.',
-        'times': 'Remove multiple occurrences of an adapter if it is '
-                 'repeated, up to `times` times.',
-        'overlap': 'Require at least `overlap` bases of overlap between read '
-                   'and adapter for an adapter to be found.',
-        'match_read_wildcards': 'Interpret IUPAC wildcards (e.g., N) in '
-                                'reads.',
-        'match_adapter_wildcards': 'Interpret IUPAC wildcards (e.g., N) in '
-                                   'adapters.',
-        'minimum_length': 'Discard reads shorter than specified value. Note, '
-                          'the cutadapt default of 0 has been overridden, '
-                          'because that value produces empty sequence '
-                          'records.',
-        'discard_untrimmed': 'Discard reads in which no adapter was found.',
-        'max_expected_errors': 'Discard reads that exceed maximum expected '
-                               'erroneous nucleotides.',
-        'max_n': 'Discard reads with more than COUNT N bases. '
-                 'If COUNT_or_FRACTION is a number between 0 and 1, '
-                 'it is interpreted as a fraction of the read length.',
-        'quality_cutoff_3end': 'Trim nucleotides with Phred score quality '
-                               'lower than threshold from 3 prime end.',
-        'quality_cutoff_5end': 'Trim nucleotides with Phred score quality '
-                               'lower than threshold from 5 prime end.',
+        'indels': (
+            'Allow insertions or deletions of bases when matching adapters.'
+        ),
+        'times': (
+            'Remove multiple occurrences of an adapter if it is '
+            'repeated, up to `times` times.'
+        ),
+        'overlap': (
+            'Require at least `overlap` bases of overlap between read '
+            'and adapter for an adapter to be found.'
+        ),
+        'match_read_wildcards': (
+            'Interpret IUPAC wildcards (e.g., N) in reads.'
+        ),
+        'match_adapter_wildcards': (
+            'Interpret IUPAC wildcards (e.g., N) in adapters.'
+        ),
+        'minimum_length': (
+            'Discard reads shorter than specified value. Note, '
+            'the cutadapt default of 0 has been overridden, '
+            'because that value produces empty sequence '
+            'records.'
+        ),
+        'discard_untrimmed': (
+            'Discard reads in which no adapter was found.'
+        ),
+        'max_expected_errors': (
+            'Discard reads that exceed maximum expected erroneous nucleotides.'
+        ),
+        'max_n': (
+            'Discard reads with more than COUNT N bases. '
+            'If COUNT_or_FRACTION is a number between 0 and 1, '
+            'it is interpreted as a fraction of the read length.'
+        ),
+        'quality_cutoff_3end': (
+            'Trim nucleotides with Phred score quality lower than threshold '
+            'from 3 prime end.'
+        ),
+        'quality_cutoff_5end': (
+            'Trim nucleotides with Phred score quality lower than threshold '
+            'from 5 prime end.'
+        ),
         'quality_base': 'How the Phred score is encoded (33 or 64).',
+        'cores': 'Number of CPU cores to use.',
     },
     output_descriptions={
         'trimmed_sequences': 'The resulting trimmed sequences.',
