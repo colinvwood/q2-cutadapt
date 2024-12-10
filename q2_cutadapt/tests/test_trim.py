@@ -9,6 +9,7 @@
 import gzip
 import itertools
 import os
+from pathlib import Path
 import unittest
 
 import pandas as pd
@@ -182,6 +183,127 @@ class TestTrimSingle(TestPluginBase):
                 for record in itertools.zip_longest(*[obs_fh] * 4):
                     self.assertTrue(record[0].strip() != maxn_seq_id)
 
+    def test_cut_parameter_default(self):
+        '''
+        The default value of cut = 0 should not have any effect.
+        '''
+        sequences = Artifact.import_data(
+            'SampleData[SequencesWithQuality]',
+            self.get_data_path('single-end')
+        )
+        sequences_format = sequences.view(
+            SingleLanePerSampleSingleEndFastqDirFmt
+        )
+
+        with redirected_stdio(stdout=os.devnull):
+            trimmed, = self.plugin.methods['trim_single'](
+                sequences
+            )
+        trimmed_format = trimmed.view(SingleLanePerSampleSingleEndFastqDirFmt)
+
+        input_filenames = sequences_format.path.glob('*fastq.gz')
+        input_filenames = [str(path.name) for path in list(input_filenames)]
+        output_filenames = trimmed_format.path.glob('*fastq.gz')
+        output_filenames = [str(path.name) for path in list(output_filenames)]
+
+        self.assertEqual(input_filenames, output_filenames)
+
+        for filename in input_filenames:
+            input_fp = Path(sequences_format.path) / filename
+            output_fp = Path(trimmed_format.path) / filename
+
+            with gzip.open(input_fp, 'rb') as input_fh:
+                with gzip.open(output_fp, 'rb') as output_fh:
+                    self.assertEqual(input_fh.read(), output_fh.read())
+
+    def test_cut_parameter_5_prime(self):
+        '''
+        Tests that ensure the 5' cut parameter behaves as expected.
+        '''
+        sequences = Artifact.import_data(
+            'SampleData[SequencesWithQuality]',
+            self.get_data_path('single-end')
+        )
+
+        with redirected_stdio(stdout=os.devnull):
+            trimmed, = self.plugin.methods['trim_single'](
+                sequences, cut=5,
+            )
+        trimmed_format = trimmed.view(SingleLanePerSampleSingleEndFastqDirFmt)
+
+        for fastq_filename in Path(trimmed_format.path).glob('*.fastq.gz'):
+            fastq_fp = Path(trimmed_format.path) / fastq_filename
+            with gzip.open(fastq_fp, 'rb') as fh:
+                record_index = 0
+                while True:
+                    try:
+                        next(fh)  # header
+                        sequence = next(fh).strip()
+                        next(fh)  # divider
+                        quality = next(fh).strip()
+
+                        # assert records are proper length
+                        # (input records are 152 bp long)
+                        self.assertEqual(len(sequence), 147)
+                        self.assertEqual(len(quality), 147)
+
+                        # check certain records from certain samples
+                        if record_index == 13 and 'S01' in str(fastq_filename):
+                            self.assertEqual(sequence[:5], b'AGNGG')
+                            self.assertEqual(sequence[-5:], b'TAGTG')
+
+                        if record_index == 0 and 'S02' in str(fastq_filename):
+                            self.assertEqual(sequence[:5], b'AGGAT')
+                            self.assertEqual(sequence[-5:], b'GGGGG')
+
+                        record_index += 1
+                    except StopIteration:
+                        break
+
+    def test_cut_parameter_3_prime(self):
+        '''
+        Tests that ensure the 3' cut parameter behaves as expected.
+        '''
+        sequences = Artifact.import_data(
+            'SampleData[SequencesWithQuality]',
+            self.get_data_path('single-end')
+        )
+
+        with redirected_stdio(stdout=os.devnull):
+            trimmed, = self.plugin.methods['trim_single'](
+                sequences, cut=-20,
+            )
+        trimmed_format = trimmed.view(SingleLanePerSampleSingleEndFastqDirFmt)
+
+        for fastq_filename in Path(trimmed_format.path).glob('*.fastq.gz'):
+            fastq_fp = Path(trimmed_format.path) / fastq_filename
+            with gzip.open(fastq_fp, 'rb') as fh:
+                record_index = 0
+                while True:
+                    try:
+                        next(fh)  # header
+                        sequence = next(fh).strip()
+                        next(fh)  # divider
+                        quality = next(fh).strip()
+
+                        # assert records are proper length
+                        # (input records are 152 bp long)
+                        self.assertEqual(len(sequence), 132)
+                        self.assertEqual(len(quality), 132)
+
+                        # check certain records from certain samples
+                        if record_index == 4 and 'S01' in str(fastq_filename):
+                            self.assertEqual(sequence[:5], b'TACGG')
+                            self.assertEqual(sequence[-5:], b'ACAGA')
+
+                        if record_index == 11 and 'S03' in str(fastq_filename):
+                            self.assertEqual(sequence[:5], b'NACGT')
+                            self.assertEqual(sequence[-5:], b'GGAGA')
+
+                        record_index += 1
+                    except StopIteration:
+                        break
+
 
 class TestTrimPaired(TestPluginBase):
     package = 'q2_cutadapt.tests'
@@ -251,6 +373,197 @@ class TestTrimPaired(TestPluginBase):
                 # Make sure cutadapt trimmed the quality scores, too
                 self.assertEqual(len(obs_seq), len(obs_qual))
             exp_fh.close(), obs_fh.close()
+
+    def test_cut_parameter_default(self):
+        '''
+        The default values of forward_cut = 0, reverse_cut = 0 should not have
+        any effect.
+        '''
+        sequences = Artifact.import_data(
+            'SampleData[PairedEndSequencesWithQuality]',
+            self.get_data_path('paired-end')
+        )
+        sequences_format = sequences.view(
+            SingleLanePerSampleSingleEndFastqDirFmt
+        )
+
+        with redirected_stdio(stdout=os.devnull):
+            trimmed, = self.plugin.methods['trim_paired'](
+                sequences, forward_cut=0, reverse_cut=0
+            )
+        trimmed_format = trimmed.view(SingleLanePerSampleSingleEndFastqDirFmt)
+
+        input_filenames = sequences_format.path.glob('*fastq.gz')
+        input_filenames = [str(path.name) for path in list(input_filenames)]
+        output_filenames = trimmed_format.path.glob('*fastq.gz')
+        output_filenames = [str(path.name) for path in list(output_filenames)]
+
+        self.assertEqual(input_filenames, output_filenames)
+
+        for filename in input_filenames:
+            input_fp = Path(sequences_format.path) / filename
+            output_fp = Path(trimmed_format.path) / filename
+
+            with gzip.open(input_fp, 'rb') as input_fh:
+                with gzip.open(output_fp, 'rb') as output_fh:
+                    self.assertEqual(input_fh.read(), output_fh.read())
+
+    def test_cut_parameter_5_prime(self):
+        '''
+        Tests that ensure the 5' cut parameters behave as expected.
+        '''
+        sequences = Artifact.import_data(
+            'SampleData[PairedEndSequencesWithQuality]',
+            self.get_data_path('paired-end')
+        )
+
+        with redirected_stdio(stdout=os.devnull):
+            trimmed, = self.plugin.methods['trim_paired'](
+                sequences, forward_cut=1, reverse_cut=9
+            )
+        trimmed_format = trimmed.view(SingleLanePerSamplePairedEndFastqDirFmt)
+
+        for fastq_filename in Path(trimmed_format.path).glob('*.fastq.gz'):
+            fastq_fp = Path(trimmed_format.path) / fastq_filename
+            with gzip.open(fastq_fp, 'rb') as fh:
+                record_index = 0
+                while True:
+                    try:
+                        next(fh)  # header
+                        sequence = next(fh).strip()
+                        next(fh)  # divider
+                        quality = next(fh).strip()
+
+                        # assert records are proper length
+                        # (input records are 152 bp long)
+                        if 'R1' in str(fastq_filename):
+                            self.assertEqual(len(sequence), 151)
+                        elif 'R2' in str(fastq_filename):
+                            self.assertEqual(len(quality), 143)
+
+                        # check certain records from certain samples
+                        if (
+                            record_index == 5 and
+                            'S03_L001_R1' in str(fastq_filename)
+                        ):
+                            self.assertEqual(sequence[:5], b'ACGTA')
+                            self.assertEqual(sequence[-5:], b'TAGTG')
+
+                        if (
+                            record_index == 0 and
+                            'S01_L001_R2' in str(fastq_filename)
+                        ):
+                            self.assertEqual(sequence[:5], b'TCCGA')
+                            self.assertEqual(sequence[-5:], b'GGGCG')
+
+                        record_index += 1
+                    except StopIteration:
+                        break
+
+    def test_cut_parameter_3_prime(self):
+        '''
+        Tests that ensure the 3' cut parameters behave as expected.
+        '''
+        sequences = Artifact.import_data(
+            'SampleData[PairedEndSequencesWithQuality]',
+            self.get_data_path('paired-end')
+        )
+
+        with redirected_stdio(stdout=os.devnull):
+            trimmed, = self.plugin.methods['trim_paired'](
+                sequences, forward_cut=-8, reverse_cut=-4
+            )
+        trimmed_format = trimmed.view(SingleLanePerSampleSingleEndFastqDirFmt)
+
+        for fastq_filename in Path(trimmed_format.path).glob('*.fastq.gz'):
+            fastq_fp = Path(trimmed_format.path) / fastq_filename
+            with gzip.open(fastq_fp, 'rb') as fh:
+                record_index = 0
+                while True:
+                    try:
+                        next(fh)  # header
+                        sequence = next(fh).strip()
+                        next(fh)  # divider
+                        quality = next(fh).strip()
+
+                        # assert records are proper length
+                        # (input records are 152 bp long)
+                        if 'R1' in str(fastq_filename):
+                            self.assertEqual(len(sequence), 144)
+                        elif 'R2' in str(fastq_filename):
+                            self.assertEqual(len(quality), 148)
+
+                        # check certain records from certain samples
+                        if (
+                            record_index == 0 and
+                            'S02_L001_R1' in str(fastq_filename)
+                        ):
+                            self.assertEqual(sequence[:5], b'TACGG')
+                            self.assertEqual(sequence[-5:], b'GGGAA')
+
+                        if (
+                            record_index == 2 and
+                            'S03_L001_R2' in str(fastq_filename)
+                        ):
+                            self.assertEqual(sequence[:5], b'TACGG')
+                            self.assertEqual(sequence[-5:], b'TGTAT')
+
+                        record_index += 1
+                    except StopIteration:
+                        break
+
+    def test_cut_parameter_both_ends(self):
+        '''
+        Tests that ensure that both a forward 3' cut parameter and a reverse 5'
+        cut parameter behave as expected.
+        '''
+        sequences = Artifact.import_data(
+            'SampleData[PairedEndSequencesWithQuality]',
+            self.get_data_path('paired-end')
+        )
+
+        with redirected_stdio(stdout=os.devnull):
+            trimmed, = self.plugin.methods['trim_paired'](
+                sequences, forward_cut=-5, reverse_cut=11
+            )
+        trimmed_format = trimmed.view(SingleLanePerSampleSingleEndFastqDirFmt)
+
+        for fastq_filename in Path(trimmed_format.path).glob('*.fastq.gz'):
+            fastq_fp = Path(trimmed_format.path) / fastq_filename
+            with gzip.open(fastq_fp, 'rb') as fh:
+                record_index = 0
+                while True:
+                    try:
+                        next(fh)  # header
+                        sequence = next(fh).strip()
+                        next(fh)  # divider
+                        quality = next(fh).strip()
+
+                        # assert records are proper length
+                        # (input records are 152 bp long)
+                        if 'R1' in str(fastq_filename):
+                            self.assertEqual(len(sequence), 147)
+                        elif 'R2' in str(fastq_filename):
+                            self.assertEqual(len(quality), 141)
+
+                        # check certain records from certain samples
+                        if (
+                            record_index == 1 and
+                            'S01_L001_R1' in str(fastq_filename)
+                        ):
+                            self.assertEqual(sequence[:5], b'TACGG')
+                            self.assertEqual(sequence[-5:], b'ATTCG')
+
+                        if (
+                            record_index == 2 and
+                            'S02_L001_R2' in str(fastq_filename)
+                        ):
+                            self.assertEqual(sequence[:5], b'CGAGC')
+                            self.assertEqual(sequence[-5:], b'GGGGG')
+
+                        record_index += 1
+                    except StopIteration:
+                        break
 
 
 class TestTrimUtilsSingle(TestPluginBase):
