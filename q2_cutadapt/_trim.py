@@ -37,6 +37,8 @@ _trim_defaults = {
     'front_r': None,
     'anywhere_f': None,
     'anywhere_r': None,
+    'forward_cut': 0,
+    'reverse_cut': 0,
     'error_rate': 0.1,
     'indels': True,
     'times': 1,
@@ -53,43 +55,43 @@ _trim_defaults = {
 }
 
 
-def _build_trim_command(f_read, r_read, trimmed_seqs,
-                        cores=_trim_defaults['cores'],
-                        adapter_f=_trim_defaults['adapter_f'],
-                        front_f=_trim_defaults['front_f'],
-                        anywhere_f=_trim_defaults['anywhere_f'],
-                        adapter_r=_trim_defaults['adapter_r'],
-                        front_r=_trim_defaults['front_r'],
-                        anywhere_r=_trim_defaults['anywhere_r'],
-                        error_rate=_trim_defaults['error_rate'],
-                        indels=_trim_defaults['indels'],
-                        times=_trim_defaults['times'],
-                        overlap=_trim_defaults['overlap'],
-                        match_read_wildcards=_trim_defaults[
-                            'match_read_wildcards'],
-                        match_adapter_wildcards=_trim_defaults[
-                            'match_adapter_wildcards'],
-                        minimum_length=_trim_defaults['minimum_length'],
-                        discard_untrimmed=_trim_defaults['discard_untrimmed'],
-                        max_expected_errors=_trim_defaults[
-                            'max_expected_errors'],
-                        max_n=_trim_defaults[
-                            'max_n'],
-                        quality_cutoff_5end=_trim_defaults[
-                            'quality_cutoff_5end'],
-                        quality_cutoff_3end=_trim_defaults[
-                            'quality_cutoff_3end'],
-                        quality_base=_trim_defaults['quality_base']
-                        ):
+def _build_trim_command(
+    f_read,
+    r_read,
+    trimmed_seqs,
+    cores=_trim_defaults['cores'],
+    adapter_f=_trim_defaults['adapter_f'],
+    front_f=_trim_defaults['front_f'],
+    anywhere_f=_trim_defaults['anywhere_f'],
+    adapter_r=_trim_defaults['adapter_r'],
+    front_r=_trim_defaults['front_r'],
+    anywhere_r=_trim_defaults['anywhere_r'],
+    forward_cut=_trim_defaults['forward_cut'],
+    reverse_cut=_trim_defaults['reverse_cut'],
+    error_rate=_trim_defaults['error_rate'],
+    indels=_trim_defaults['indels'],
+    times=_trim_defaults['times'],
+    overlap=_trim_defaults['overlap'],
+    match_read_wildcards=_trim_defaults['match_read_wildcards'],
+    match_adapter_wildcards=_trim_defaults['match_adapter_wildcards'],
+    minimum_length=_trim_defaults['minimum_length'],
+    discard_untrimmed=_trim_defaults['discard_untrimmed'],
+    max_expected_errors=_trim_defaults['max_expected_errors'],
+    max_n=_trim_defaults['max_n'],
+    quality_cutoff_5end=_trim_defaults['quality_cutoff_5end'],
+    quality_cutoff_3end=_trim_defaults['quality_cutoff_3end'],
+    quality_base=_trim_defaults['quality_base'],
+):
     cmd = [
         'cutadapt',
-        '--cores', str(cores),
+        '-u', str(forward_cut),
         '--error-rate', str(error_rate),
         '--times', str(times),
         '--overlap', str(overlap),
         '--minimum-length', str(minimum_length),
         '-q', ','.join([str(quality_cutoff_5end), str(quality_cutoff_3end)]),
         '--quality-base', str(quality_base),
+        '--cores', str(cores),
         '-o', str(trimmed_seqs.path / os.path.basename(f_read)),
     ]
 
@@ -116,6 +118,9 @@ def _build_trim_command(f_read, r_read, trimmed_seqs,
         for adapter in anywhere_r:
             cmd += ['-B', adapter]  # cutadapt doesn't have a long-form flag
 
+    if reverse_cut is not None:
+        cmd += ['-U', str(reverse_cut)]
+
     if not indels:
         cmd += ['--no-indels']
     if match_read_wildcards:
@@ -133,98 +138,127 @@ def _build_trim_command(f_read, r_read, trimmed_seqs,
         cmd += ['--max-expected-errors', str(max_expected_errors)]
     if max_n is not None:
         cmd += ['--max-n', str(max_n)]
+
     return cmd
 
 
-def trim_single(demultiplexed_sequences:
-                SingleLanePerSampleSingleEndFastqDirFmt,
-                cores: int = _trim_defaults['cores'],
-                adapter: str = _trim_defaults['adapter_f'],
-                front: str = _trim_defaults['front_f'],
-                anywhere: str = _trim_defaults['anywhere_f'],
-                error_rate: float = _trim_defaults['error_rate'],
-                indels: bool = _trim_defaults['indels'],
-                times: int = _trim_defaults['times'],
-                overlap: int = _trim_defaults['overlap'],
-                match_read_wildcards:
-                bool = _trim_defaults['match_read_wildcards'],
-                match_adapter_wildcards:
-                bool = _trim_defaults['match_adapter_wildcards'],
-                minimum_length: int = _trim_defaults['minimum_length'],
-                discard_untrimmed:
-                bool = _trim_defaults['discard_untrimmed'],
-                max_expected_errors:
-                float = _trim_defaults['max_expected_errors'],
-                max_n:
-                float = _trim_defaults['max_n'],
-                quality_cutoff_5end:
-                int = _trim_defaults['quality_cutoff_5end'],
-                quality_cutoff_3end:
-                int = _trim_defaults['quality_cutoff_3end'],
-                quality_base: int = _trim_defaults['quality_base']) -> \
-                    CasavaOneEightSingleLanePerSampleDirFmt:
+def trim_single(
+    demultiplexed_sequences: SingleLanePerSampleSingleEndFastqDirFmt,
+    adapter: str = _trim_defaults['adapter_f'],
+    front: str = _trim_defaults['front_f'],
+    anywhere: str = _trim_defaults['anywhere_f'],
+    cut: int = _trim_defaults['forward_cut'],
+    error_rate: float = _trim_defaults['error_rate'],
+    indels: bool = _trim_defaults['indels'],
+    times: int = _trim_defaults['times'],
+    overlap: int = _trim_defaults['overlap'],
+    match_read_wildcards: bool = _trim_defaults['match_read_wildcards'],
+    match_adapter_wildcards: bool = _trim_defaults['match_adapter_wildcards'],
+    minimum_length: int = _trim_defaults['minimum_length'],
+    discard_untrimmed: bool = _trim_defaults['discard_untrimmed'],
+    max_expected_errors: float = _trim_defaults['max_expected_errors'],
+    max_n: float = _trim_defaults['max_n'],
+    quality_cutoff_5end: int = _trim_defaults['quality_cutoff_5end'],
+    quality_cutoff_3end: int = _trim_defaults['quality_cutoff_3end'],
+    quality_base: int = _trim_defaults['quality_base'],
+    cores: int = _trim_defaults['cores'],
+) -> CasavaOneEightSingleLanePerSampleDirFmt:
     trimmed_sequences = CasavaOneEightSingleLanePerSampleDirFmt()
     cmds = []
     df = demultiplexed_sequences.manifest.view(pd.DataFrame)
     for _, fwd in df.itertuples():
-        cmd = _build_trim_command(fwd, None,
-                                  trimmed_sequences, cores, adapter, front,
-                                  anywhere, None, None, None, error_rate,
-                                  indels, times, overlap, match_read_wildcards,
-                                  match_adapter_wildcards, minimum_length,
-                                  discard_untrimmed, max_expected_errors,
-                                  max_n, quality_cutoff_5end,
-                                  quality_cutoff_3end, quality_base)
+        cmd = _build_trim_command(
+            f_read=fwd,
+            r_read=None,
+            trimmed_seqs=trimmed_sequences,
+            adapter_f=adapter,
+            front_f=front,
+            anywhere_f=anywhere,
+            adapter_r=None,
+            front_r=None,
+            anywhere_r=None,
+            forward_cut=cut,
+            reverse_cut=None,
+            error_rate=error_rate,
+            indels=indels,
+            times=times,
+            overlap=overlap,
+            match_read_wildcards=match_read_wildcards,
+            match_adapter_wildcards=match_adapter_wildcards,
+            minimum_length=minimum_length,
+            discard_untrimmed=discard_untrimmed,
+            max_expected_errors=max_expected_errors,
+            max_n=max_n,
+            quality_cutoff_5end=quality_cutoff_5end,
+            quality_cutoff_3end=quality_cutoff_3end,
+            quality_base=quality_base,
+            cores=cores,
+        )
         cmds.append(cmd)
 
     run_commands(cmds)
+
     return trimmed_sequences
 
 
-def trim_paired(demultiplexed_sequences:
-                SingleLanePerSamplePairedEndFastqDirFmt,
-                cores: int = _trim_defaults['cores'],
-                adapter_f: str = _trim_defaults['adapter_f'],
-                front_f: str = _trim_defaults['front_f'],
-                anywhere_f: str = _trim_defaults['anywhere_f'],
-                adapter_r: str = _trim_defaults['adapter_r'],
-                front_r: str = _trim_defaults['front_r'],
-                anywhere_r: str = _trim_defaults['anywhere_r'],
-                error_rate: float = _trim_defaults['error_rate'],
-                indels: bool = _trim_defaults['indels'],
-                times: int = _trim_defaults['times'],
-                overlap: int = _trim_defaults['overlap'],
-                match_read_wildcards:
-                bool = _trim_defaults['match_read_wildcards'],
-                match_adapter_wildcards:
-                bool = _trim_defaults['match_adapter_wildcards'],
-                minimum_length: int = _trim_defaults['minimum_length'],
-                discard_untrimmed:
-                bool = _trim_defaults['discard_untrimmed'],
-                max_expected_errors:
-                float = _trim_defaults['max_expected_errors'],
-                max_n:
-                float = _trim_defaults['max_n'],
-                quality_cutoff_5end:
-                int = _trim_defaults['quality_cutoff_5end'],
-                quality_cutoff_3end:
-                int = _trim_defaults['quality_cutoff_3end'],
-                quality_base: int = _trim_defaults['quality_base']) -> \
-                    CasavaOneEightSingleLanePerSampleDirFmt:
+def trim_paired(
+    demultiplexed_sequences: SingleLanePerSamplePairedEndFastqDirFmt,
+    adapter_f: str = _trim_defaults['adapter_f'],
+    front_f: str = _trim_defaults['front_f'],
+    anywhere_f: str = _trim_defaults['anywhere_f'],
+    adapter_r: str = _trim_defaults['adapter_r'],
+    front_r: str = _trim_defaults['front_r'],
+    anywhere_r: str = _trim_defaults['anywhere_r'],
+    forward_cut: int = _trim_defaults['forward_cut'],
+    reverse_cut: int = _trim_defaults['reverse_cut'],
+    error_rate: float = _trim_defaults['error_rate'],
+    indels: bool = _trim_defaults['indels'],
+    times: int = _trim_defaults['times'],
+    overlap: int = _trim_defaults['overlap'],
+    match_read_wildcards: bool = _trim_defaults['match_read_wildcards'],
+    match_adapter_wildcards: bool = _trim_defaults['match_adapter_wildcards'],
+    minimum_length: int = _trim_defaults['minimum_length'],
+    discard_untrimmed: bool = _trim_defaults['discard_untrimmed'],
+    max_expected_errors: float = _trim_defaults['max_expected_errors'],
+    max_n: float = _trim_defaults['max_n'],
+    quality_cutoff_5end: int = _trim_defaults['quality_cutoff_5end'],
+    quality_cutoff_3end: int = _trim_defaults['quality_cutoff_3end'],
+    quality_base: int = _trim_defaults['quality_base'],
+    cores: int = _trim_defaults['cores'],
+) -> CasavaOneEightSingleLanePerSampleDirFmt:
     trimmed_sequences = CasavaOneEightSingleLanePerSampleDirFmt()
     cmds = []
     df = demultiplexed_sequences.manifest.view(pd.DataFrame)
     for _, fwd, rev in df.itertuples():
-        cmd = _build_trim_command(fwd, rev, trimmed_sequences, cores,
-                                  adapter_f, front_f,
-                                  anywhere_f, adapter_r, front_r, anywhere_r,
-                                  error_rate, indels, times, overlap,
-                                  match_read_wildcards,
-                                  match_adapter_wildcards, minimum_length,
-                                  discard_untrimmed, max_expected_errors,
-                                  max_n, quality_cutoff_5end,
-                                  quality_cutoff_3end, quality_base)
+        cmd = _build_trim_command(
+            f_read=fwd,
+            r_read=rev,
+            trimmed_seqs=trimmed_sequences,
+            adapter_f=adapter_f,
+            front_f=front_f,
+            anywhere_f=anywhere_f,
+            adapter_r=adapter_r,
+            front_r=front_r,
+            anywhere_r=anywhere_r,
+            forward_cut=forward_cut,
+            reverse_cut=reverse_cut,
+            error_rate=error_rate,
+            indels=indels,
+            times=times,
+            overlap=overlap,
+            match_read_wildcards=match_read_wildcards,
+            match_adapter_wildcards=match_adapter_wildcards,
+            minimum_length=minimum_length,
+            discard_untrimmed=discard_untrimmed,
+            max_expected_errors=max_expected_errors,
+            max_n=max_n,
+            quality_cutoff_5end=quality_cutoff_5end,
+            quality_cutoff_3end=quality_cutoff_3end,
+            quality_base=quality_base,
+            cores=cores,
+        )
         cmds.append(cmd)
 
     run_commands(cmds)
+
     return trimmed_sequences
